@@ -4,6 +4,8 @@ import { PlayerEntity } from "./entities/player-entity.js";
 import { Input } from "./models/console.input.js";
 import { World } from "./world.js";
 import { UpgradeSystem } from "./systems/upgrade-system.js";
+import { PointsSystem } from "./systems/points-system.js";
+import { ShopSystem } from "./systems/shop-system.js";
 import { KEYMAP } from "./data/keymap.js";
 
 export class Engine {
@@ -26,9 +28,19 @@ export class Engine {
         // Sistema de mejoras
         this.upgradeSystem = new UpgradeSystem();
         
-        // Configurar callback para cuando se coja un item
+        // Sistema de puntos
+        this.pointsSystem = new PointsSystem();
+        
+        // Sistema de tienda
+        this.shopSystem = new ShopSystem();
+        
+        // Configurar callbacks
         world.onItemPickup = (item) => {
             this.handleItemPickup(item);
+        };
+        
+        world.onEnemyKilled = (enemy, killer) => {
+            this.handleEnemyKilled(enemy, killer);
         };
     }
 
@@ -56,7 +68,15 @@ export class Engine {
             this.handleUpgradeSelection();
             // No procesar movimiento ni acciones durante la selección
             player.entity.input.clear();
+        } else if (this.shopSystem.isActive) {
+            // Manejar tienda
+            this.handleShopSelection();
+            player.entity.input.clear();
         } else {
+            // Abrir tienda con tecla S
+            if (player.entity.input && player.entity.input.isPressed(KEYMAP.S)) {
+                this.openShop();
+            }
             // Movimiento y acciones normales
             if (player.entity instanceof PlayerEntity) {
                 player.entity.readInput();
@@ -67,6 +87,9 @@ export class Engine {
 
             // Avanzar tick solo si no está pausado
             world.update(player);
+            
+            // Actualizar sistema de puntos (para combos)
+            this.pointsSystem.update(world.tick);
 
             world.generateEnemies();
             world.generateItems();
@@ -75,8 +98,25 @@ export class Engine {
         // Logs de info
         const infoLogs = [];
         
-        // Si el sistema de mejoras está activo, mostrar opciones
-        if (this.upgradeSystem.isActive) {
+        // Si la tienda está activa, mostrar items
+        if (this.shopSystem.isActive) {
+            infoLogs.push({ key: '=== TIENDA ===', value: '' });
+            infoLogs.push({ key: 'Puntos disponibles', value: this.pointsSystem.getTotal() });
+            infoLogs.push({ key: '', value: '' });
+            
+            this.shopSystem.items.forEach((item, index) => {
+                const marker = index === this.shopSystem.selectedIndex ? '>>> ' : '    ';
+                const canAfford = this.pointsSystem.getTotal() >= item.cost;
+                const affordMark = canAfford ? '' : ' [NO DISPONIBLE]';
+                infoLogs.push({ 
+                    key: `${marker}[${index + 1}] ${item.name}`, 
+                    value: `${item.description} - ${item.cost} pts${affordMark}` 
+                });
+            });
+            
+            infoLogs.push({ key: '', value: '' });
+            infoLogs.push({ key: 'Flechas: Navegar | Enter: Comprar | ESC: Salir', value: '' });
+        } else if (this.upgradeSystem.isActive) {
             infoLogs.push({ key: '=== SELECCIONA UNA MEJORA ===', value: '' });
             infoLogs.push({ key: '', value: '' });
             
@@ -93,6 +133,18 @@ export class Engine {
         } else if (!world.gameOver) {
             infoLogs.push({ key: 'Seed', value: world.seed });
             infoLogs.push({ key: 'Difficulty', value: Math.floor(world.getDifficultyFactor()) });
+            infoLogs.push({ key: 'Puntos', value: this.pointsSystem.getTotal() });
+            infoLogs.push({ key: 'Presiona S para abrir la tienda', value: '' });
+            
+            // Mostrar combo si está activo
+            const combo = this.pointsSystem.getCombo();
+            if (combo > 1) {
+                infoLogs.push({ 
+                    key: '🔥 COMBO', 
+                    value: `x${combo} (Racha: ${this.pointsSystem.getKillStreak()})` 
+                });
+            }
+            
             infoLogs.push({ key: 'Player', value: JSON.stringify(player.entity.stats) });
 
             // Mostrar enemigos cercanos
@@ -111,7 +163,8 @@ export class Engine {
 
         } else {
             infoLogs.push({ key: 'GAMEOVER' });
-            infoLogs.push({ key: 'Puntos conseguidos', value: player.entity.points });
+            infoLogs.push({ key: 'Puntos Finales', value: this.pointsSystem.getTotal() });
+            infoLogs.push({ key: 'Mejor Racha', value: this.pointsSystem.getKillStreak() });
         }
 
         return {
@@ -164,6 +217,74 @@ export class Engine {
         }
     }
 
+    handleEnemyKilled(enemy, killer) {
+        if (killer && killer.type === ENTITY_TYPE.PLAYER) {
+            const difficulty = this.world.getDifficultyFactor();
+            const killData = this.pointsSystem.calculateKillPoints(enemy, difficulty, this.world.tick);
+            this.pointsSystem.addPoints(killData.points);
+        }
+    }
+
+    openShop() {
+        // Pausar el mundo
+        this.world.paused = true;
+        
+        // Generar items de la tienda
+        const difficulty = this.world.getDifficultyFactor();
+        this.shopSystem.generateShopItems(difficulty, this.player.entity.stats);
+        
+        // Abrir tienda
+        this.shopSystem.open();
+    }
+
+    handleShopSelection() {
+        const input = this.input;
+        
+        // Navegar con flechas
+        if (input.isPressed(KEYMAP.UP)) {
+            this.shopSystem.selectedIndex = Math.max(0, this.shopSystem.selectedIndex - 1);
+        } else if (input.isPressed(KEYMAP.DOWN)) {
+            this.shopSystem.selectedIndex = Math.min(
+                this.shopSystem.items.length - 1, 
+                this.shopSystem.selectedIndex + 1
+            );
+        }
+        
+        // Comprar con Enter o números
+        if (input.isPressed(KEYMAP.ENTER)) {
+            this.purchaseShopItem(this.shopSystem.selectedIndex);
+        } else if (input.isPressed(KEYMAP.NUM1)) {
+            this.purchaseShopItem(0);
+        } else if (input.isPressed(KEYMAP.NUM2)) {
+            this.purchaseShopItem(1);
+        } else if (input.isPressed(KEYMAP.NUM3)) {
+            this.purchaseShopItem(2);
+        } else if (input.isPressed(KEYMAP.NUM4)) {
+            this.purchaseShopItem(3);
+        } else if (input.isPressed(KEYMAP.NUM5)) {
+            this.purchaseShopItem(4);
+        } else if (input.isPressed(KEYMAP.NUM6)) {
+            this.purchaseShopItem(5);
+        }
+        
+        // Cerrar con ESC
+        if (input.isPressed(KEYMAP.ESC)) {
+            this.closeShop();
+        }
+    }
+
+    purchaseShopItem(index) {
+        if (this.shopSystem.purchaseItem(index, this.pointsSystem, this.player.entity)) {
+            // Item comprado exitosamente
+            // La tienda permanece abierta para comprar más
+        }
+    }
+
+    closeShop() {
+        this.shopSystem.close();
+        this.world.paused = false;
+    }
+
     applyUpgrade(index) {
         const option = this.upgradeSystem.selectOption(index);
         if (option) {
@@ -189,10 +310,17 @@ export class Engine {
         }
         this.player = { entity: playerEntity };
         
-        // Reiniciar sistema de mejoras
+        // Reiniciar sistemas
         this.upgradeSystem = new UpgradeSystem();
+        this.pointsSystem.reset();
+        this.shopSystem = new ShopSystem();
+        
         this.world.onItemPickup = (item) => {
             this.handleItemPickup(item);
+        };
+        
+        this.world.onEnemyKilled = (enemy, killer) => {
+            this.handleEnemyKilled(enemy, killer);
         };
 
         this.running = true;

@@ -63,6 +63,10 @@ export class Projectile {
             applyDamage(target, damage);
 
             if (target.dead) {
+                // Notificar al mundo que se mató un enemigo para dar puntos
+                if (world.onEnemyKilled) {
+                    world.onEnemyKilled(target, this.owner);
+                }
                 world.removeEntity(target);
             }
 

@@ -34,7 +34,11 @@ export class CombatBehavior extends BaseBehavior {
         );
 
         if (distance === 1) {
-            this.attack(player.entity);
+            const attacked = this.attack(player.entity);
+            // Si el jugador muere, no hay puntos que dar
+            if (attacked && player.entity.dead && world.onPlayerKilled) {
+                world.onPlayerKilled();
+            }
         }
     }
 

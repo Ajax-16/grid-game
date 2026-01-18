@@ -31,6 +31,10 @@ export class World {
         this.tick = 0;
         this.gameOver = false;
         this.paused = false;
+        
+        // Callbacks para eventos
+        this.onEnemyKilled = null;
+        this.onPlayerKilled = null;
 
         const graphics = { wall: '#' };
         this.graphics = graphics;
@@ -106,8 +110,18 @@ export class World {
             if (player.entity.stats.hp <= 0) this.gameOver = true;
         }
 
+        // Filtrar entidades muertas y notificar si eran enemigos
         this.entities = this.entities.filter(e => {
-            if (!e.dead) return true;
+            if (e.dead) {
+                // Si era un enemigo, notificar
+                if ((e.type === ENTITY_TYPE.ENEMY || e.type === ENTITY_TYPE.RANGED_ENEMY) && 
+                    this.onEnemyKilled) {
+                    // Asumir que el jugador lo mató (se puede mejorar después)
+                    this.onEnemyKilled(e, player.entity);
+                }
+                return false;
+            }
+            return true;
         });
 
         for (const projectile of this.projectiles) {
