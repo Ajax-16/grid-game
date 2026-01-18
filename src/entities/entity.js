@@ -11,6 +11,8 @@ export class Entity {
         this.stats = stats;
         this.char = '';
         this.type = '';
+        this.tickCounter = 0;
+        this.dead = false;
     }
 
     move(dx, dy) {

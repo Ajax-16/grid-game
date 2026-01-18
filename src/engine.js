@@ -51,6 +51,7 @@ export class Engine {
         // Logs de info
         const infoLogs = [];
         if (!world.gameOver) {
+            infoLogs.push({ key: 'Seed', value: world.seed });
             infoLogs.push({ key: 'Difficulty', value: Math.floor(world.getDifficultyFactor()) });
             infoLogs.push({ key: 'Player', value: JSON.stringify(player.entity.stats) });
 
@@ -71,7 +72,7 @@ export class Engine {
         }
 
         return {
-            grid: world.buildGrid(),
+            grid: world.buildGrid(player),
             info: infoLogs
         };
     }
@@ -87,7 +88,7 @@ export class Engine {
     }
 
     restart() {
-        this.world = new World();
+        this.world = new World({ cols: 80, rows: 40 });
         this.input = new Input();
         this.player = new Player(this.world.entities[0], this.input);
 

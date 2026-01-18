@@ -1,26 +1,33 @@
 import { ENTITY_TYPE } from "../data/entity.type.js";
 
 export class ConsoleGrid {
-    constructor({ cols, rows, graphics }) {
+    constructor({ cols, rows, graphics, initialGrid = null }) {
         this.cols = cols;
         this.rows = rows;
         this.graphics = graphics;
+        // Guardar una copia profunda del grid inicial
+        this.initialGrid = initialGrid ? initialGrid.map(row => [...row]) : null;
         this.clear();
     }
 
     clear() {
         const { wall } = this.graphics;
 
-        this.grid = Array.from({ length: this.rows }, (_, y) =>
-            Array.from({ length: this.cols }, (_, x) => {
-                const isBorder =
-                    y === 0 ||
-                    y === this.rows - 1 ||
-                    x === 0 ||
-                    x === this.cols - 1;
-                return isBorder ? wall : " ";
-            })
-        );
+        // Si hay un grid inicial, usarlo; si no, generar uno con bordes
+        if (this.initialGrid) {
+            this.grid = this.initialGrid.map(row => [...row]);
+        } else {
+            this.grid = Array.from({ length: this.rows }, (_, y) =>
+                Array.from({ length: this.cols }, (_, x) => {
+                    const isBorder =
+                        y === 0 ||
+                        y === this.rows - 1 ||
+                        x === 0 ||
+                        x === this.cols - 1;
+                    return isBorder ? wall : " ";
+                })
+            );
+        }
     }
 
     isWall(x, y) {
