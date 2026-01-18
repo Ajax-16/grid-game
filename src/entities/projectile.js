@@ -58,7 +58,7 @@ export class Projectile {
 
         // Si el proyectil es del jugador, afecta a enemigos
         if (this.owner.type === ENTITY_TYPE.PLAYER && target && 
-            (target.type == ENTITY_TYPE.ENEMY || target.type == ENTITY_TYPE.RANGED_ENEMY)) {
+            (target.type == ENTITY_TYPE.ENEMY || target.type == ENTITY_TYPE.RANGED_ENEMY || target.type == ENTITY_TYPE.BOSS)) {
             const damage = this.owner.stats?.attack ?? 1;
             applyDamage(target, damage);
 
@@ -75,7 +75,7 @@ export class Projectile {
         }
 
         // Si el proyectil es de un enemigo, solo afecta al jugador
-        if ((this.owner.type === ENTITY_TYPE.ENEMY || this.owner.type === ENTITY_TYPE.RANGED_ENEMY) && 
+        if ((this.owner.type === ENTITY_TYPE.ENEMY || this.owner.type === ENTITY_TYPE.RANGED_ENEMY || this.owner.type === ENTITY_TYPE.BOSS) && 
             target && target.type == ENTITY_TYPE.PLAYER) {
             const damage = this.owner.stats?.attack ?? 1;
             applyDamage(target, damage);

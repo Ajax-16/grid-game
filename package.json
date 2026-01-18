@@ -9,5 +9,8 @@
   "keywords": [],
   "author": "David Bernárdez Luque",
   "license": "ISC",
-  "description": ""
+  "description": "",
+  "dependencies": {
+    "phaser": "^3.90.0"
+  }
 }

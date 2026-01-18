@@ -22,7 +22,7 @@ export class EnemyEntity extends GameEntity {
     static calculateStats(difficulty) {
         return {
             hp: Math.floor(difficulty),
-            speed: 0.5 + Math.floor(difficulty / 5),
+            speed: 0.25 + Math.floor(difficulty / 10),
             attack: 1 + Math.floor(difficulty / 2),
             attackSpeed: 0.5 + Math.floor(difficulty / 10)
         };

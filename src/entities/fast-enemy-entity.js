@@ -16,8 +16,8 @@ export class FastEnemyEntity extends EnemyEntity {
         const baseStats = super.calculateStats(difficulty);
         return {
             ...baseStats,
-            speed: baseStats.speed * 2, // El doble de velocidad
-            hp: Math.floor(baseStats.hp * 0.5) // Menos HP para balance
+            speed: baseStats.speed * 1.5, // Un poco más rápido
+            hp: Math.floor(baseStats.hp * 0.75) // Menos HP para balance
         };
     }
 }

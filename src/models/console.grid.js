@@ -1,14 +1,10 @@
 import { ENTITY_TYPE } from "../data/entity.type.js";
+import { Grid } from "../core/grid.js";
 
-export class ConsoleGrid {
+export class ConsoleGrid extends Grid {
     constructor({ cols, rows, graphics, initialGrid = null }) {
-        this.cols = cols;
-        this.rows = rows;
-        this.graphics = graphics;
-        // Guardar una copia profunda del grid inicial
-        this.initialGrid = initialGrid ? initialGrid.map(row => [...row]) : null;
-        this.clear();
-    }
+        super({ cols, rows, graphics, initialGrid });
+    }   
 
     clear() {
         const { wall } = this.graphics;

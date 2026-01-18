@@ -6,6 +6,7 @@ import { World } from "./world.js";
 import { UpgradeSystem } from "./systems/upgrade-system.js";
 import { PointsSystem } from "./systems/points-system.js";
 import { ShopSystem } from "./systems/shop-system.js";
+import { WaveSystem } from "./systems/wave-system.js";
 import { KEYMAP } from "./data/keymap.js";
 
 export class Engine {
@@ -34,6 +35,10 @@ export class Engine {
         // Sistema de tienda
         this.shopSystem = new ShopSystem();
         
+        // Sistema de oleadas
+        this.waveSystem = new WaveSystem();
+        world.waveSystem = this.waveSystem;
+        
         // Configurar callbacks
         world.onItemPickup = (item) => {
             this.handleItemPickup(item);
@@ -46,7 +51,11 @@ export class Engine {
 
     start() {
         this.running = true;
-        this.loop();
+        // Solo iniciar loop automático si no estamos en Phaser
+        // Phaser manejará el loop desde su método update()
+        if (typeof window === 'undefined' || !window.Phaser) {
+            this.loop();
+        }
     }
 
     loop() {
@@ -77,6 +86,17 @@ export class Engine {
             if (player.entity.input && player.entity.input.isPressed(KEYMAP.S)) {
                 this.openShop();
             }
+            
+            // Habilidades especiales
+            if (player.entity.abilitySystem) {
+                if (player.entity.input.isPressed(KEYMAP.Q)) {
+                    player.entity.abilitySystem.activateAbility('dash', world);
+                } else if (player.entity.input.isPressed(KEYMAP.W)) {
+                    player.entity.abilitySystem.activateAbility('aoe', world);
+                } else if (player.entity.input.isPressed(KEYMAP.E)) {
+                    player.entity.abilitySystem.activateAbility('heal', world);
+                }
+            }
             // Movimiento y acciones normales
             if (player.entity instanceof PlayerEntity) {
                 player.entity.readInput();
@@ -88,11 +108,14 @@ export class Engine {
             // Avanzar tick solo si no está pausado
             world.update(player);
             
-            // Actualizar sistema de puntos (para combos)
+            // Actualizar sistemas
             this.pointsSystem.update(world.tick);
-
-            world.generateEnemies();
-            world.generateItems();
+            if (player.entity.abilitySystem) {
+                player.entity.abilitySystem.update();
+            }
+            
+            world.generateEnemies(player);
+            world.generateItems(player);
         }
 
         // Logs de info
@@ -131,10 +154,23 @@ export class Engine {
             infoLogs.push({ key: '', value: '' });
             infoLogs.push({ key: 'Flechas: Navegar | Enter: Confirmar | 1-3: Seleccionar directo', value: '' });
         } else if (!world.gameOver) {
+            // Información de oleada
+            const waveInfo = this.waveSystem.getWaveInfo();
+            const waveTitle = waveInfo.isBossWave ? '⚠️  OLEADA BOSS ' + waveInfo.wave + ' ⚠️' : '=== OLEADA ' + waveInfo.wave + ' ===';
+            infoLogs.push({ key: waveTitle, value: '' });
+            
+            // Barra de progreso visual
+            const progressBar = '█'.repeat(Math.floor(waveInfo.progress / 10)) + 
+                              '░'.repeat(10 - Math.floor(waveInfo.progress / 10));
+            infoLogs.push({ key: 'Progreso', value: `${waveInfo.killed}/${waveInfo.required} [${progressBar}] ${waveInfo.progress}%` });
+            
+            if (waveInfo.isBossWave) {
+                infoLogs.push({ key: '⚠️  ¡CUIDADO! Bosses aparecerán ⚠️', value: '' });
+            }
+            infoLogs.push({ key: '', value: '' });
+            
             infoLogs.push({ key: 'Seed', value: world.seed });
-            infoLogs.push({ key: 'Difficulty', value: Math.floor(world.getDifficultyFactor()) });
             infoLogs.push({ key: 'Puntos', value: this.pointsSystem.getTotal() });
-            infoLogs.push({ key: 'Presiona S para abrir la tienda', value: '' });
             
             // Mostrar combo si está activo
             const combo = this.pointsSystem.getCombo();
@@ -145,16 +181,37 @@ export class Engine {
                 });
             }
             
+            // Habilidades desbloqueadas
+            if (player.entity.abilitySystem) {
+                const abilities = player.entity.abilitySystem.getAbilitiesStatus();
+                const unlockedAbilities = abilities.filter(a => a.unlocked);
+                if (unlockedAbilities.length > 0) {
+                    unlockedAbilities.forEach(ability => {
+                        const status = ability.ready ? '✓ Listo' : `⏱ ${ability.cooldown}`;
+                        infoLogs.push({ 
+                            key: `${ability.name} (${ability.key.toUpperCase()})`, 
+                            value: status 
+                        });
+                    });
+                } else {
+                    infoLogs.push({ key: 'Habilidades', value: 'Compra habilidades en la tienda (S)' });
+                }
+            }
+            
+            infoLogs.push({ key: '', value: '' });
+            infoLogs.push({ key: 'Controles', value: 'S: Tienda | Q: Dash | W: AOE | E: Curar' });
             infoLogs.push({ key: 'Player', value: JSON.stringify(player.entity.stats) });
 
             // Mostrar enemigos cercanos
             const enemies = world.entities.filter(e =>
-                (e.type === ENTITY_TYPE.ENEMY || e.type === ENTITY_TYPE.RANGED_ENEMY) &&
+                (e.type === ENTITY_TYPE.ENEMY || e.type === ENTITY_TYPE.RANGED_ENEMY || e.type === ENTITY_TYPE.BOSS) &&
                 player.entity &&
                 Math.abs(e.x - player.entity.x) + Math.abs(e.y - player.entity.y) <= 3
             );
             enemies.forEach((e, i) => {
-                const type = e.type === ENTITY_TYPE.RANGED_ENEMY ? 'R' : 'E';
+                let type = 'E';
+                if (e.type === ENTITY_TYPE.RANGED_ENEMY) type = 'R';
+                else if (e.type === ENTITY_TYPE.BOSS) type = 'BOSS';
                 infoLogs.push({
                     key: `${type} ${i}`,
                     value: `HP:${e.stats.hp} ATK:${e.stats.attack} SPD:${e.stats.speed} ASPD:${e.stats.attackSpeed?.toFixed(1) ?? 1}`
@@ -188,7 +245,7 @@ export class Engine {
         this.world.paused = true;
         
         // Generar opciones de mejoras
-        const difficulty = this.world.getDifficultyFactor();
+        const difficulty = this.waveSystem.getDifficultyMultiplier();
         this.upgradeSystem.generateOptions(difficulty);
     }
 
@@ -219,9 +276,23 @@ export class Engine {
 
     handleEnemyKilled(enemy, killer) {
         if (killer && killer.type === ENTITY_TYPE.PLAYER) {
-            const difficulty = this.world.getDifficultyFactor();
+            const difficulty = this.waveSystem.getDifficultyMultiplier();
             const killData = this.pointsSystem.calculateKillPoints(enemy, difficulty, this.world.tick);
             this.pointsSystem.addPoints(killData.points);
+            
+            // Registrar muerte en el sistema de oleadas
+            if (this.waveSystem) {
+                const wasComplete = this.waveSystem.waveComplete;
+                this.waveSystem.registerKill();
+                
+                // Si se completa la oleada, avanzar
+                if (!wasComplete && this.waveSystem.waveComplete) {
+                    // Bonificación por completar oleada
+                    const waveBonus = this.waveSystem.currentWave * 10;
+                    this.pointsSystem.addPoints(waveBonus);
+                    this.waveSystem.nextWave();
+                }
+            }
         }
     }
 
@@ -229,9 +300,13 @@ export class Engine {
         // Pausar el mundo
         this.world.paused = true;
         
-        // Generar items de la tienda
-        const difficulty = this.world.getDifficultyFactor();
-        this.shopSystem.generateShopItems(difficulty, this.player.entity.stats);
+        // Generar items de la tienda (incluyendo habilidades disponibles)
+        const difficulty = this.waveSystem.getDifficultyMultiplier();
+        this.shopSystem.generateShopItems(
+            difficulty, 
+            this.player.entity.stats,
+            this.player.entity.abilitySystem
+        );
         
         // Abrir tienda
         this.shopSystem.open();
@@ -314,6 +389,8 @@ export class Engine {
         this.upgradeSystem = new UpgradeSystem();
         this.pointsSystem.reset();
         this.shopSystem = new ShopSystem();
+        this.waveSystem = new WaveSystem();
+        this.world.waveSystem = this.waveSystem;
         
         this.world.onItemPickup = (item) => {
             this.handleItemPickup(item);

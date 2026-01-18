@@ -32,8 +32,8 @@ export class MazeGenerator {
     // Genera habitaciones aleatorias
     generateRooms() {
         const rooms = [];
-        const minRoomSize = 5;
-        const maxRoomSize = 10;
+        const minRoomSize = 9;
+        const maxRoomSize = 15;
         const maxRooms = Math.floor((this.cols * this.rows) / 100);
 
         for (let i = 0; i < maxRooms; i++) {

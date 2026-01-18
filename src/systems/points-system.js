@@ -19,8 +19,10 @@ export class PointsSystem {
         
         if (enemy.type === 'REN') { // Ranged enemy
             basePoints = 15;
-        } else if (enemy.char === 'B') { // Boss
-            basePoints = 50;
+        } else if (enemy.type === 'BOS' || enemy.char === 'B') { // Boss
+            basePoints = 100; // Muchos más puntos por boss
+        } else if (enemy.char === 'F') { // Fast enemy
+            basePoints = 12;
         }
 
         // Multiplicador por dificultad

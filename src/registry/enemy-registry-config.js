@@ -1,6 +1,7 @@
 import { EnemyEntity } from "../entities/enemy-entity.js";
 import { FastEnemyEntity } from "../entities/fast-enemy-entity.js";
 import { RangedEnemyEntity } from "../entities/ranged-enemy-entity.js";
+import { BossEnemyEntity } from "../entities/boss-enemy-entity.js";
 import { EnemyRegistry } from "./enemy-registry.js";
 
 /**
