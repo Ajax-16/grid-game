@@ -71,7 +71,10 @@ export class PlayerBehavior extends BaseBehavior {
 
         const entity = world.grid.getCell(x, y);
         if (entity && entity.type === ENTITY_TYPE.OBJ) {
-            this.entity.addStats(entity);
+            // Activar sistema de mejoras en lugar de aplicar directamente
+            if (world.onItemPickup) {
+                world.onItemPickup(entity);
+            }
             world.removeEntity(entity);
         }
     }

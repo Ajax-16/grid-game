@@ -30,6 +30,7 @@ export class World {
 
         this.tick = 0;
         this.gameOver = false;
+        this.paused = false;
 
         const graphics = { wall: '#' };
         this.graphics = graphics;
@@ -66,6 +67,9 @@ export class World {
 
     // ---- Tick update ----
     update(player) {
+        // No avanzar ticks si está pausado
+        if (this.paused) return;
+        
         this.tick++;
 
         for (const entity of this.entities) {
