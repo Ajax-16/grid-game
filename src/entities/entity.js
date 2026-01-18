@@ -1,5 +1,7 @@
 import { DIRECTION } from "../data/direction.js";
 import { ENTITY_TYPE } from "../data/entity.type.js";
+import { calculateAttackCooldown, applyDamage, canAttack, isInRange } from "../utils/combat.utils.js";
+import { manhattanDistance } from "../utils/direction.utils.js";
 
 export class Entity {
     constructor(x, y, stats) {
@@ -12,6 +14,7 @@ export class Entity {
         this.char = '';
         this.type = '';
         this.tickCounter = 0;
+        this.attackCooldown = 0;
         this.dead = false;
     }
 
@@ -41,8 +44,8 @@ export class Entity {
         const dy = Math.sign(diffY);
 
         // Si ya está al lado (no moverse encima)
-        if (Math.abs(diffX) + Math.abs(diffY) === 1) {
-            if (this.type === ENTITY_TYPE.ENEMY) {
+        if (manhattanDistance(this.x, this.y, target.x, target.y) === 1) {
+            if (this.type === ENTITY_TYPE.ENEMY || this.type === ENTITY_TYPE.RANGED_ENEMY) {
                 this.attackEntity(target);
             }
             return;
@@ -65,20 +68,26 @@ export class Entity {
         if (dx !== 0 && !grid.isOccupied(this.x + dx, this.y, this)) {
             this.move(dx, 0);
         }
-
     }
 
     attackEntity(target) {
-        const range = this.stats?.range ?? 1;
-        const distance =
-            Math.abs(target.x - this.x) + Math.abs(target.y - this.y);
+        if (!canAttack(this)) return;
 
-        if (distance > range) return;
+        const range = this.stats?.range ?? 1;
+        if (!isInRange(this, target, range)) return;
 
         const damage = this.stats?.attack ?? 1;
-        target.stats.hp = Math.max(0, target.stats.hp - damage);
+        applyDamage(target, damage);
 
-        if (target.stats.hp === 0) target.dead = true;
+        // Aplicar cooldown basado en attackSpeed
+        const attackSpeed = this.stats?.attackSpeed ?? 1;
+        this.attackCooldown = calculateAttackCooldown(attackSpeed);
+    }
+
+    updateAttackCooldown() {
+        if (this.attackCooldown > 0) {
+            this.attackCooldown--;
+        }
     }
 
     addStats({stats}) {
@@ -93,6 +102,9 @@ export class Entity {
         }
         if (stats.speed) {
             this.stats.speed += stats.speed;
+        }
+        if (stats.attackSpeed) {
+            this.stats.attackSpeed = (this.stats.attackSpeed ?? 1) + stats.attackSpeed;
         }
     }
 

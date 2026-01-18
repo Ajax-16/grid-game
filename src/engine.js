@@ -1,6 +1,6 @@
 // engine.js
 import { ENTITY_TYPE } from "./data/entity.type.js";
-import { Player } from "./entities/player.js";
+import { PlayerEntity } from "./entities/player-entity.js";
 import { Input } from "./models/console.input.js";
 import { World } from "./world.js";
 
@@ -13,8 +13,13 @@ export class Engine {
         this.input = input;
         this.world = world;
 
-        // Crear Player una sola vez
-        this.player = new Player(world.entities[0], input);
+        // Asignar input al jugador
+        const playerEntity = world.entities[0];
+        if (playerEntity instanceof PlayerEntity) {
+            playerEntity.input = input;
+            playerEntity.playerBehavior.input = input;
+        }
+        this.player = { entity: playerEntity };
     }
 
     start() {
@@ -37,10 +42,12 @@ export class Engine {
         const { player, world } = this;
 
         // Movimiento y acciones
-        player.readInput();
-        player.checkMove(world);
-        player.checkAction(world);
-        player.input.clear();
+        if (player.entity instanceof PlayerEntity) {
+            player.entity.readInput();
+            player.entity.checkMove(world);
+            player.entity.checkAction(world);
+            player.entity.input.clear();
+        }
 
         // Avanzar tick
         world.update(player);
@@ -57,13 +64,15 @@ export class Engine {
 
             // Mostrar enemigos cercanos
             const enemies = world.entities.filter(e =>
-                e.type === ENTITY_TYPE.ENEMY &&
+                (e.type === ENTITY_TYPE.ENEMY || e.type === ENTITY_TYPE.RANGED_ENEMY) &&
+                player.entity &&
                 Math.abs(e.x - player.entity.x) + Math.abs(e.y - player.entity.y) <= 3
             );
             enemies.forEach((e, i) => {
+                const type = e.type === ENTITY_TYPE.RANGED_ENEMY ? 'R' : 'E';
                 infoLogs.push({
-                    key: `Enemy ${i}`,
-                    value: `HP:${e.stats.hp} ATK:${e.stats.attack} SPD:${e.stats.speed}`
+                    key: `${type} ${i}`,
+                    value: `HP:${e.stats.hp} ATK:${e.stats.attack} SPD:${e.stats.speed} ASPD:${e.stats.attackSpeed?.toFixed(1) ?? 1}`
                 });
             });
 
@@ -90,7 +99,12 @@ export class Engine {
     restart() {
         this.world = new World({ cols: 80, rows: 40 });
         this.input = new Input();
-        this.player = new Player(this.world.entities[0], this.input);
+        const playerEntity = this.world.entities[0];
+        if (playerEntity instanceof PlayerEntity) {
+            playerEntity.input = this.input;
+            playerEntity.playerBehavior.input = this.input;
+        }
+        this.player = { entity: playerEntity };
 
         this.running = true;
         this.loop();

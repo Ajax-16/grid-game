@@ -1,5 +1,7 @@
 import { DIRECTION } from "../data/direction.js";
 import { ENTITY_TYPE } from "../data/entity.type.js";
+import { getDirectionOffset } from "../utils/direction.utils.js";
+import { applyDamage } from "../utils/combat.utils.js";
 
 export class Projectile {
     constructor(entity, direction, owner) {
@@ -26,51 +28,59 @@ export class Projectile {
 
         this.entity.tickCounter = 0;
 
-        const dirMap = {
-            [DIRECTION.NORTH]: [0, -1],
-            [DIRECTION.SOUTH]: [0, 1],
-            [DIRECTION.EAST]: [1, 0],
-            [DIRECTION.WEST]: [-1, 0]
-        };
-
-        const [dx, dy] = dirMap[this.direction];
+        const [dx, dy] = getDirectionOffset(this.direction);
         const nx = this.entity.x + dx;
         const ny = this.entity.y + dy;
 
-        // Colisión con pared
+        // Verificar colisión en la posición actual primero
+        const allEntities = [...world.entities];
+        let target = allEntities.find(
+            e => e.x === this.entity.x && e.y === this.entity.y && e !== this.entity && e.type !== ENTITY_TYPE.PROJECTILE
+        );
+
+        // Si no hay colisión en la posición actual, verificar en la nueva posición
+        if (!target) {
+            target = allEntities.find(
+                e => e.x === nx && e.y === ny && e !== this.entity && e.type !== ENTITY_TYPE.PROJECTILE
+            );
+        }
+
+        // Colisión con pared (solo en nueva posición)
         if (world.grid.isWall(nx, ny)) {
             world.removeEntity(this.entity);
             return;
         }
-
-        // Colisión con enemigos
-        const target = world.entities.find(
-            e => e.x === this.entity.x && e.y === this.entity.y
-        );
 
         if (target && target.type == ENTITY_TYPE.OBJ) {
             world.removeEntity(this.entity);
             return;
         }
 
-        
-        if (target && target.type == ENTITY_TYPE.ENEMY) {
-            // Aplicar daño del owner
+        // Si el proyectil es del jugador, afecta a enemigos
+        if (this.owner.type === ENTITY_TYPE.PLAYER && target && 
+            (target.type == ENTITY_TYPE.ENEMY || target.type == ENTITY_TYPE.RANGED_ENEMY)) {
             const damage = this.owner.stats?.attack ?? 1;
-            target.stats.hp -= damage;
+            applyDamage(target, damage);
 
-            // Marcar muerto si hp <= 0
-            if (target.stats.hp <= 0) {
-                target.dead = true;
+            if (target.dead) {
                 world.removeEntity(target);
             }
 
-            // Destruir proyectil
             world.removeEntity(this.entity);
             return;
         }
 
-        // Mover proyectil
+        // Si el proyectil es de un enemigo, solo afecta al jugador
+        if ((this.owner.type === ENTITY_TYPE.ENEMY || this.owner.type === ENTITY_TYPE.RANGED_ENEMY) && 
+            target && target.type == ENTITY_TYPE.PLAYER) {
+            const damage = this.owner.stats?.attack ?? 1;
+            applyDamage(target, damage);
+
+            world.removeEntity(this.entity);
+            return;
+        }
+
+        // Mover proyectil solo si no hay colisión
         this.entity.move(dx, dy);
 
         // Contador de distancia

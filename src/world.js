@@ -1,8 +1,8 @@
 // world.js
 import { ConsoleGrid } from "./models/console.grid.js";
-import { Entity } from "./entities/entity.js";
-import { Enemy } from "./entities/enemy.js";
-import { Item } from "./entities/item.js";
+import { PlayerEntity } from "./entities/player-entity.js";
+import { EntityFactory } from "./factories/entity-factory.js";
+import { setupEnemyRegistry } from "./registry/enemy-registry-config.js";
 import { ENTITY_TYPE } from "./data/entity.type.js";
 import { chance, setSeed, randomInt } from "./utils/random.js";
 import { MazeGenerator } from "./utils/maze-generator.js";
@@ -48,11 +48,16 @@ export class World {
 
         // Encontrar una posición válida para el jugador
         const playerPos = mazeGen.findValidPosition();
-        this.entities = [
-            new Entity(playerPos.x, playerPos.y, { range: 1, attack: 1, hp: 10, speed: 1 })
-        ];
+        const player = new PlayerEntity(
+            playerPos.x, 
+            playerPos.y, 
+            { range: 1, attack: 1, hp: 10, speed: 1, attackSpeed: 1 },
+            null // input se asignará después
+        );
+        this.entities = [player];
 
         this.projectiles = [];
+        this.enemyRegistry = setupEnemyRegistry();
         this.grid.setEntities([...this.entities, ...this.projectiles]);
 
         // Crear cámara
@@ -67,21 +72,29 @@ export class World {
             entity.tickCounter ??= 0;
             entity.speed ??= entity.stats?.speed ?? 1;
 
+            // Actualizar cooldown de ataque
+            entity.updateAttackCooldown();
+
             entity.tickCounter++;
 
             if (entity.tickCounter < this.getTickDelay(entity)) continue;
             entity.tickCounter = 0;
 
-            // Enemigos atacan o se mueven
-            if (entity.type === ENTITY_TYPE.ENEMY) {
-                const diff =
-                    Math.abs(entity.x - player.entity.x) +
-                    Math.abs(entity.y - player.entity.y);
-
-                if (diff === 1) {
-                    entity.attackEntity(player.entity);
-                } else {
-                    entity.moveToEntity(player.entity, this.grid);
+            // Enemigos con comportamientos
+            if (entity.type === ENTITY_TYPE.ENEMY || entity.type === ENTITY_TYPE.RANGED_ENEMY) {
+                if (entity.updateBehaviors) {
+                    // Usar sistema de comportamientos
+                    entity.updateBehaviors(this, player, this.tick);
+                    
+                    // Si tiene comportamiento de movimiento, usarlo para perseguir
+                    const movementBehavior = entity.getBehavior('movement');
+                    if (movementBehavior) {
+                        const distance = Math.abs(entity.x - player.entity.x) + 
+                                       Math.abs(entity.y - player.entity.y);
+                        if (distance > 1) {
+                            movementBehavior.moveToTarget(player.entity, this.grid);
+                        }
+                    }
                 }
             }
 
@@ -161,7 +174,7 @@ export class World {
                 if (y >= 0 && y < fullGrid.length && x >= 0 && x < fullGrid[y].length) {
                     row.push(fullGrid[y][x]);
                 } else {
-                    row.push('#');
+                    row.push(this.graphics.wall);
                 }
             }
             visibleGrid.push(row);
@@ -188,21 +201,19 @@ export class World {
             // Si no encontramos posición válida, no generar enemigo
             if (attempts >= 50) return;
 
-            const hp = Math.floor(difficulty);
-            const speed = 0.5 + Math.floor(difficulty / 5);
-            const attack = 1 + Math.floor(difficulty / 2);
+            // Usar el registro para crear un enemigo aleatorio
+            const enemy = this.enemyRegistry.createRandom(x, y, difficulty);
+            if (enemy) {
+                // Boss aleatorio
+                if (difficulty > 5 && chance(70)) {
+                    enemy.char = 'B';
+                    enemy.stats.hp *= 3;
+                    enemy.stats.attack *= 3;
+                    enemy.stats.speed *= 1.25;
+                }
 
-            const enemy = new Enemy(new Entity(x, y, { hp, speed, attack }));
-
-            // Boss aleatorio
-            if (difficulty > 5 && chance(70)) {
-                enemy.entity.char = 'B';
-                enemy.entity.stats.hp *= 3;
-                enemy.entity.stats.attack *= 3;
-                enemy.entity.stats.speed *= 1.25;
+                this.entities.push(enemy);
             }
-
-            this.entities.push(enemy.entity);
         }
     }
 
@@ -224,17 +235,15 @@ export class World {
             // Si no encontramos posición válida, no generar item
             if (attempts >= 50) return;
 
-            const stats = ['hp', 'attack', 'range', 'speed'];
+            const stats = ['hp', 'attack', 'range', 'speed', 'attackSpeed'];
             const stat = stats[randomInt(0, stats.length - 1)];
 
             const value = 1 + Math.floor(difficulty / 2);
 
-            const item = new Item(
-                new Entity(x, y, { [stat]: value })
-            );
-            item.entity.effect = { stat, value };
+            const item = EntityFactory.createItem(x, y, { [stat]: value });
+            item.effect = { stat, value };
 
-            this.entities.push(item.entity);
+            this.entities.push(item);
         }
     }
 
@@ -245,7 +254,7 @@ export class World {
 
     // ---- Auxiliar: stat random ----
     getRandomStat() {
-        const stats = ['hp', 'attack', 'range', 'speed'];
+        const stats = ['hp', 'attack', 'range', 'speed', 'attackSpeed'];
         return stats[randomInt(0, stats.length - 1)];
     }
 }

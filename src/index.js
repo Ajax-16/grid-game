@@ -7,7 +7,7 @@ const input = new Input();
 const world = new World({ cols: 80, rows: 40 });
 
 const engine = new Engine({
-    fps: 60,
+    fps: 30,
     render: consoleRender,
     stopRender: consoleStopRender,
     input,
